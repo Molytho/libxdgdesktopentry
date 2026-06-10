@@ -14,6 +14,7 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/regex.hpp>
 
+#include "string_helper.h"
 #include "xdg_base_directory.h"
 
 using namespace std::string_view_literals;
@@ -186,18 +187,15 @@ namespace {
         }
 
         static std::vector<std::string> parse_as_vector(std::string_view value) {
-            std::vector<std::string> values;
-            if (!value.empty()) {
-                size_t begin_pos, end_pos = -1;
-                do {
-                    begin_pos = end_pos + 1;
-                    end_pos   = value.find(';', begin_pos);
+            if (value.empty()) {
+                return {};
+            }
 
-                    auto sub_str = value.substr(begin_pos, end_pos - begin_pos);
-                    if (!sub_str.empty()) {
-                        values.emplace_back(sub_str);
-                    }
-                } while (end_pos < value.size());
+            std::vector<std::string> values;
+            for (const auto &str : utils::string_spliterator(value, ';')) {
+                if (!str.empty()) {
+                    values.emplace_back(str);
+                }
             }
             return values;
         }
