@@ -3,21 +3,21 @@
 
 #if defined _WIN32 || defined __CYGWIN__
 # ifdef BUILDING_LIBXDGDESKTOPENTRY
-#  define LIBXDGDESKTOPENTRY_PUBLIC __declspec(dllexport)
+#  define API_PUBLIC __declspec(dllexport)
 # else
-#  define LIBXDGDESKTOPENTRY_PUBLIC __declspec(dllimport)
+#  define API_PUBLIC __declspec(dllimport)
 # endif
 #elif defined __OS2__
 # ifdef BUILDING_LIBXDGDESKTOPENTRY
-#  define LIBXDGDESKTOPENTRY_PUBLIC __declspec(dllexport)
+#  define API_PUBLIC __declspec(dllexport)
 # else
-#  define LIBXDGDESKTOPENTRY_PUBLIC
+#  define API_PUBLIC
 # endif
 #else
 # ifdef BUILDING_LIBXDGDESKTOPENTRY
-#  define LIBXDGDESKTOPENTRY_PUBLIC __attribute__((visibility("default")))
+#  define API_PUBLIC __attribute__((visibility("default")))
 # else
-#  define LIBXDGDESKTOPENTRY_PUBLIC
+#  define API_PUBLIC
 # endif
 #endif
 

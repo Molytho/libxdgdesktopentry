@@ -41,19 +41,19 @@ namespace xdg::desktop_entry_spec {
         Version,
         Last = Version
     };
-    std::string_view to_string(well_known_keys val) noexcept;
-    std::optional<well_known_keys> well_known_keys_from_string(std::string_view str) noexcept;
-    std::ostream &operator<<(std::ostream &os, well_known_keys val);
-    std::istream &operator>>(std::istream &is, well_known_keys &out);
+    API_PUBLIC std::string_view to_string(well_known_keys val) noexcept;
+    API_PUBLIC std::optional<well_known_keys> well_known_keys_from_string(std::string_view str) noexcept;
+    API_PUBLIC std::ostream &operator<<(std::ostream &os, well_known_keys val);
+    API_PUBLIC std::istream &operator>>(std::istream &is, well_known_keys &out);
 
     enum class entry_type : uint8_t { Application, Link, Directory };
-    std::string_view to_string(entry_type val) noexcept;
-    std::optional<entry_type> entry_type_from_string(std::string_view str) noexcept;
-    std::ostream &operator<<(std::ostream &os, entry_type val);
-    std::istream &operator>>(std::istream &is, entry_type &out);
+    API_PUBLIC std::string_view to_string(entry_type val) noexcept;
+    API_PUBLIC std::optional<entry_type> entry_type_from_string(std::string_view str) noexcept;
+    API_PUBLIC std::ostream &operator<<(std::ostream &os, entry_type val);
+    API_PUBLIC std::istream &operator>>(std::istream &is, entry_type &out);
 
     namespace detail {
-        class LIBXDGDESKTOPENTRY_PUBLIC alternative_locales {
+        class API_PUBLIC alternative_locales {
             struct end_tag { };
 
             class iter {
@@ -86,7 +86,7 @@ namespace xdg::desktop_entry_spec {
         };
 
         template<class T>
-        class LIBXDGDESKTOPENTRY_PUBLIC localized_data {
+        class API_PUBLIC localized_data {
             T m_generic {};
             std::unordered_map<std::string, T> m_translations {};
 
@@ -123,7 +123,7 @@ namespace xdg::desktop_entry_spec {
     using localized_string      = detail::localized_data<std::string>;
     using localized_string_list = detail::localized_data<std::vector<std::string>>;
 
-    class LIBXDGDESKTOPENTRY_PUBLIC desktop_entry {
+    class API_PUBLIC desktop_entry {
     public:
         desktop_entry(std::istream &is);
 
