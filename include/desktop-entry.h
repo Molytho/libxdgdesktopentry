@@ -53,55 +53,34 @@ namespace xdg::desktop_entry_spec {
     std::istream &operator>>(std::istream &is, entry_type &out);
 
     namespace detail {
-        inline std::string strip_encoding(std::string str) {
-            // TODO
-            return str;
-        }
-
-        inline std::string strip_encoding(std::string_view str) {
-            return strip_encoding(std::string(str));
-        }
-
-        class alternative_locales {
+        class LIBXDGDESKTOPENTRY_PUBLIC alternative_locales {
             struct end_tag { };
 
-            class alternative_locales_iter {
-                const std::string &m_orig_str;
+            class iter {
+                std::string_view m_modifier;
                 std::string m_str;
 
             public:
                 using difference_type = std::ptrdiff_t;
                 using value_type      = std::string;
 
-                alternative_locales_iter(const std::string &orig) :
-                        m_orig_str(orig), m_str(orig) { }
+                iter(std::string_view orig);
+                iter(const iter &other);
 
-                alternative_locales_iter(const alternative_locales_iter &other) :
-                        m_orig_str(other.m_orig_str), m_str(other.m_str) { }
+                const std::string &operator*() const noexcept;
 
-                const std::string &operator*() const noexcept { return m_str; }
-
-                LIBXDGDESKTOPENTRY_PUBLIC alternative_locales_iter &operator++();
-
-                alternative_locales_iter operator++(int) {
-                    alternative_locales_iter it = *this;
-                    ++(*this);
-                    return it;
-                }
+                iter &operator++();
+                iter operator++(int);
 
                 bool operator==(end_tag) const noexcept { return m_str.empty(); }
-
-                friend bool operator==(end_tag tag, const alternative_locales_iter &self) {
-                    return self == tag;
-                }
             };
 
-            std::string m_str;
+            std::string_view m_str;
 
         public:
-            alternative_locales(std::string str) : m_str(std::move(str)) { }
+            alternative_locales(std::string_view str);
 
-            alternative_locales_iter begin() const { return alternative_locales_iter(m_str); }
+            iter begin() const { return iter(m_str); }
 
             end_tag end() const noexcept { return {}; }
         };
@@ -130,7 +109,7 @@ namespace xdg::desktop_entry_spec {
 
             const T *get(std::string_view locale) {
                 if (!locale.empty()) {
-                    for (const auto &str : alternative_locales(std::string(locale))) {
+                    for (const auto &str : alternative_locales(locale)) {
                         if (auto it = m_translations.find(str); it != m_translations.end()) {
                             return std::addressof(it->second);
                         }

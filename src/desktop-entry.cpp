@@ -291,6 +291,20 @@ namespace {
 
         return res;
     }
+
+    std::string language_strip_encoding(std::string_view lang) {
+        auto parsed = parse_language(lang);
+        std::string res {parsed.lang};
+        if (!parsed.country.empty()) {
+            res.push_back('_');
+            res.append(parsed.country);
+        }
+        if (!parsed.modifier.empty()) {
+            res.push_back('@');
+            res.append(parsed.modifier);
+        }
+        return res;
+    }
 } // namespace
 
 namespace xdg::desktop_entry_spec {
@@ -353,12 +367,26 @@ namespace xdg::desktop_entry_spec {
     }
 
     namespace detail {
-        alternative_locales::alternative_locales_iter &alternative_locales::alternative_locales_iter::operator++() {
-            auto parsed_orig    = parse_language(m_orig_str);
+        alternative_locales::iter::iter(std::string_view orig) :
+                m_modifier(), m_str(language_strip_encoding(orig)) {
+            auto parsed = parse_language(orig);
+            m_modifier  = parsed.modifier;
+        }
+
+        alternative_locales::iter::iter(const iter &other) :
+                m_modifier(other.m_modifier), m_str(other.m_str) { }
+
+        const std::string &alternative_locales::iter::operator*() const noexcept {
+            return m_str;
+        }
+
+        alternative_locales::iter &alternative_locales::iter::operator++() {
             auto parsed_current = parse_language(m_str);
 
             assert(!parsed_current.lang.empty());
-            if (parsed_current.modifier.empty() && parsed_current.country.empty()) {
+            if (parsed_current.lang.empty()) {
+                throw std::logic_error("Tried to increment end iterator");
+            } else if (parsed_current.modifier.empty() && parsed_current.country.empty()) {
                 m_str = {};
             } else if (!parsed_current.modifier.empty()) {
                 std::string new_str {parsed_current.lang};
@@ -369,15 +397,23 @@ namespace xdg::desktop_entry_spec {
                 m_str = std::move(new_str);
             } else if (!parsed_current.country.empty()) {
                 std::string new_str {parsed_current.lang};
-                if (!parsed_orig.modifier.empty()) {
+                if (!m_modifier.empty()) {
                     new_str.push_back('@');
-                    new_str.append(parsed_orig.modifier);
+                    new_str.append(m_modifier);
                 }
                 m_str = std::move(new_str);
             }
 
             return *this;
         }
+
+        alternative_locales::iter alternative_locales::iter::operator++(int) {
+            iter it = *this;
+            ++(*this);
+            return it;
+        }
+
+        alternative_locales::alternative_locales(std::string_view str) : m_str(str) { }
     } // namespace detail
 
     desktop_entry::desktop_entry(std::istream &is) {
