@@ -489,8 +489,9 @@ namespace xdg::desktop_entry_spec {
         if (m_relative_path.empty()) {
             return {};
         }
-        // TODO/FIXME: This is wrong
-        return m_relative_path;
+        std::string res = m_relative_path.string();
+        std::ranges::replace(res, '/', '-');
+        return res;
     }
 
     std::vector<std::unique_ptr<desktop_entry>> get_all_desktop_entries() {
