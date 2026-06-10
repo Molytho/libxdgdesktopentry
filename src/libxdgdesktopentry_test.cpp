@@ -1,13 +1,12 @@
-#include <cassert>
-#include <fstream>
-
 #include "desktop-entry.h"
 
-int main(int argc, char **argv) {
-    assert(argc == 2);
+int main(int, char **) {
+    auto all = xdg::desktop_entry_spec::get_all_desktop_entries();
+    if (all.empty()) {
+        return 0;
+    }
 
-    std::ifstream file(argv[1]);
-    xdg::desktop_entry_spec::desktop_entry entry {file};
+    xdg::desktop_entry_spec::desktop_entry &entry = *all.front();
 
     [[maybe_unused]] auto type = entry.get_type();
     [[maybe_unused]] auto name = entry.get_name();

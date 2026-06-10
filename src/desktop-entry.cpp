@@ -4,14 +4,19 @@
 #include <array>
 #include <cassert>
 #include <cstdlib>
+#include <filesystem>
+#include <forward_list>
+#include <fstream>
 #include <optional>
 #include <string_view>
+#include <unordered_set>
 
 #include <boost/lexical_cast.hpp>
 #include <boost/regex.hpp>
 
 using namespace std::string_view_literals;
 using namespace xdg::desktop_entry_spec;
+using namespace std::filesystem;
 
 namespace {
     constexpr std::array well_known_keys_name {
@@ -45,11 +50,11 @@ namespace {
 
     constexpr std::array entry_type_name {"Application"sv, "Link"sv, "Directory"sv};
 
-    boost::regex IsCommentRe {"^[ \\t]*#|^[ \\t]*$", boost::regex_constants::flag_type_::optimize};
+    boost::regex IsCommentRe {"^[ \\t]*(?:#.*)?$", boost::regex_constants::flag_type_::optimize};
     boost::regex IsGroupHeadRe {"^[ \\t]*\\[([ -Z\\\\^-~]+)\\][ \\t]*$", boost::regex_constants::flag_type_::optimize};
     boost::regex IsKeyParsingRe {
         "^[ \\t]*(?<key>[A-Za-z0-9-]+)(?:\\[(?<locale>[ -Z\\\\^-~]+)\\])?[ \\t]*=[ "
-        "\\t]*(?<value>.+)$",
+        "\\t]*(?<value>.*)$",
         boost::regex_constants::flag_type_::optimize
     };
 
@@ -109,7 +114,6 @@ namespace {
     struct parse_as_helper<std::string> {
         static constexpr std::array string_types {
             well_known_keys::Exec,
-            well_known_keys::Icon,
             well_known_keys::Path,
             well_known_keys::StartupWMClass,
             well_known_keys::TryExec,
@@ -207,7 +211,12 @@ namespace {
 
     template<>
     struct parse_as_helper<localized_string> {
-        static constexpr std::array localized_string_type {well_known_keys::Comment, well_known_keys::GenericName, well_known_keys::Name};
+        static constexpr std::array localized_string_type {
+            well_known_keys::Comment,
+            well_known_keys::GenericName,
+            well_known_keys::Icon,
+            well_known_keys::Name
+        };
         static_assert(std::ranges::is_sorted(localized_string_type));
 
         static constexpr bool is_type(well_known_keys val) {
@@ -259,52 +268,41 @@ namespace {
             out);
     }
 
-    struct parsed_language {
-        std::string_view lang;
-        std::string_view country;
-        std::string_view encoding;
-        std::string_view modifier;
+    class xdg_data_dir_iterator {
+        std::forward_list<path> m_str;
+
+    public:
+        xdg_data_dir_iterator() : m_str({"/home/robin/.local/share", "/usr/share/"}) {
+            // TODO/FIXME
+        }
+
+        path &operator*() {
+            assert(!m_str.empty());
+            return m_str.front();
+        }
+
+        path *operator->() {
+            assert(!m_str.empty());
+            return std::addressof(m_str.front());
+        }
+
+        xdg_data_dir_iterator &operator++() {
+            assert(!m_str.empty());
+            m_str.pop_front();
+            return *this;
+        }
+
+        bool operator==(std::default_sentinel_t) const noexcept { return m_str.empty(); }
     };
 
-    parsed_language parse_language(std::string_view lang) {
-        parsed_language res {};
-
-        auto delimiter = lang.find_first_of("_.@");
-        res.lang       = lang.substr(0, delimiter);
-
-        if (delimiter != std::string_view::npos && lang.at(delimiter) == '_') {
-            auto start_pos = delimiter + 1;
-            delimiter      = lang.find_first_of(".@", start_pos);
-            res.country    = lang.substr(start_pos, delimiter - start_pos);
-        }
-
-        if (delimiter != std::string_view::npos && lang.at(delimiter) == '.') {
-            auto start_pos = delimiter + 1;
-            delimiter      = lang.find_first_of("@", start_pos);
-            res.encoding   = lang.substr(start_pos, delimiter - start_pos);
-        }
-
-        if (delimiter != std::string_view::npos) {
-            assert(lang.at(delimiter) == '@');
-            res.modifier = lang.substr(delimiter + 1);
-        }
-
-        return res;
+    xdg_data_dir_iterator &begin(xdg_data_dir_iterator &it) {
+        return it;
     }
 
-    std::string language_strip_encoding(std::string_view lang) {
-        auto parsed = parse_language(lang);
-        std::string res {parsed.lang};
-        if (!parsed.country.empty()) {
-            res.push_back('_');
-            res.append(parsed.country);
-        }
-        if (!parsed.modifier.empty()) {
-            res.push_back('@');
-            res.append(parsed.modifier);
-        }
-        return res;
+    std::default_sentinel_t end(const xdg_data_dir_iterator &) {
+        return {};
     }
+
 } // namespace
 
 namespace xdg::desktop_entry_spec {
@@ -366,54 +364,89 @@ namespace xdg::desktop_entry_spec {
         return is;
     }
 
+    parsed_locale locale::parse() const noexcept {
+        parsed_locale res {};
+
+        std::string_view lang {m_str};
+
+        auto delimiter = lang.find_first_of("_.@");
+        res.lang       = lang.substr(0, delimiter);
+
+        if (delimiter != std::string_view::npos && lang.at(delimiter) == '_') {
+            auto start_pos = delimiter + 1;
+            delimiter      = lang.find_first_of(".@", start_pos);
+            res.country    = lang.substr(start_pos, delimiter - start_pos);
+        }
+
+        if (delimiter != std::string_view::npos && lang.at(delimiter) == '.') {
+            auto start_pos = delimiter + 1;
+            delimiter      = lang.find_first_of("@", start_pos);
+            res.encoding   = lang.substr(start_pos, delimiter - start_pos);
+        }
+
+        if (delimiter != std::string_view::npos) {
+            assert(lang.at(delimiter) == '@');
+            res.modifier = lang.substr(delimiter + 1);
+        }
+
+        return res;
+    }
+
+    void locale::strip_encoding() {
+        auto parsed = parse();
+        std::string res {parsed.lang};
+        if (!parsed.country.empty()) {
+            res.push_back('_');
+            res.append(parsed.country);
+        }
+        if (!parsed.modifier.empty()) {
+            res.push_back('@');
+            res.append(parsed.modifier);
+        }
+        m_str = std::move(res);
+    }
+
     namespace detail {
-        alternative_locales::iter::iter(std::string_view orig) :
-                m_modifier(), m_str(language_strip_encoding(orig)) {
-            auto parsed = parse_language(orig);
-            m_modifier  = parsed.modifier;
+        alternative_locales_iterator::alternative_locales_iterator(locale locale) :
+                m_modifier(locale.parse().modifier), m_locale(std::move(locale)) {
+            m_locale.strip_encoding();
         }
 
-        alternative_locales::iter::iter(const iter &other) :
-                m_modifier(other.m_modifier), m_str(other.m_str) { }
-
-        const std::string &alternative_locales::iter::operator*() const noexcept {
-            return m_str;
+        const locale &alternative_locales_iterator::operator*() const noexcept {
+            return m_locale;
         }
 
-        alternative_locales::iter &alternative_locales::iter::operator++() {
-            auto parsed_current = parse_language(m_str);
+        alternative_locales_iterator &alternative_locales_iterator::operator++() {
+            auto parsed_current = m_locale.parse();
 
             assert(!parsed_current.lang.empty());
             if (parsed_current.lang.empty()) {
                 throw std::logic_error("Tried to increment end iterator");
             } else if (parsed_current.modifier.empty() && parsed_current.country.empty()) {
-                m_str = {};
+                m_locale = {};
             } else if (!parsed_current.modifier.empty()) {
                 std::string new_str {parsed_current.lang};
                 if (!parsed_current.country.empty()) {
                     new_str.push_back('_');
                     new_str.append(parsed_current.country);
                 }
-                m_str = std::move(new_str);
+                m_locale = locale(std::move(new_str));
             } else if (!parsed_current.country.empty()) {
                 std::string new_str {parsed_current.lang};
                 if (!m_modifier.empty()) {
                     new_str.push_back('@');
                     new_str.append(m_modifier);
                 }
-                m_str = std::move(new_str);
+                m_locale = locale(std::move(new_str));
             }
 
             return *this;
         }
 
-        alternative_locales::iter alternative_locales::iter::operator++(int) {
-            iter it = *this;
-            ++(*this);
-            return it;
+        bool alternative_locales_iterator::operator==(std::default_sentinel_t) const noexcept {
+            return m_locale.str().empty();
         }
 
-        alternative_locales::alternative_locales(std::string_view str) : m_str(str) { }
     } // namespace detail
 
     desktop_entry::desktop_entry(std::istream &is) {
@@ -434,4 +467,51 @@ namespace xdg::desktop_entry_spec {
         }
     }
 
+    desktop_entry::desktop_entry(std::istream &&is) : desktop_entry(is) { }
+
+    desktop_entry::desktop_entry(path store, path relative_path) :
+            desktop_entry(std::ifstream(store / relative_path)) {
+        m_store         = std::move(store);
+        m_relative_path = std::move(relative_path);
+    }
+
+    std::string desktop_entry::get_id() const {
+        if (m_relative_path.empty()) {
+            return {};
+        }
+        // TODO/FIXME: This is wrong
+        return m_relative_path;
+    }
+
+    std::vector<std::unique_ptr<desktop_entry>> get_all_desktop_entries() {
+        std::unordered_set<std::string> ids_read;
+        std::vector<std::unique_ptr<desktop_entry>> result;
+
+        for (auto &application_dir : xdg_data_dir_iterator()) {
+            application_dir /= "applications";
+            for (const auto &file : recursive_directory_iterator(application_dir,
+                     directory_options::follow_directory_symlink | directory_options::skip_permission_denied)) {
+                if (file.path().extension() != ".desktop") {
+                    continue;
+                }
+
+                std::unique_ptr<desktop_entry> entry;
+                try {
+                    entry = std::make_unique<desktop_entry>(application_dir,
+                        file.path().lexically_relative(application_dir));
+                } catch (const std::runtime_error &ex) {
+                    // TODO: Specific exception
+                    std::cerr << "Failed to parse desktop file: " << file << '\n';
+                    continue;
+                }
+                auto emplace_res = ids_read.emplace(entry->get_id());
+                if (emplace_res.second) {
+                    // Entry is new
+                    result.emplace_back(std::move(entry));
+                }
+            }
+        }
+
+        return result;
+    }
 } // namespace xdg::desktop_entry_spec

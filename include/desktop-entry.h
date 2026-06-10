@@ -4,7 +4,10 @@
 #include <any>
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
+#include <iterator>
+#include <memory>
 #include <optional>
 #include <string_view>
 #include <unordered_map>
@@ -52,43 +55,76 @@ namespace xdg::desktop_entry_spec {
     API_PUBLIC std::ostream &operator<<(std::ostream &os, entry_type val);
     API_PUBLIC std::istream &operator>>(std::istream &is, entry_type &out);
 
+    struct parsed_locale {
+        std::string_view lang;
+        std::string_view country;
+        std::string_view encoding;
+        std::string_view modifier;
+    };
+
+    class locale {
+        std::string m_str;
+
+    public:
+        constexpr locale() : m_str() { }
+
+        constexpr explicit locale(std::string_view str) : m_str(str) { }
+
+        constexpr explicit locale(std::string str) : m_str(str) { }
+
+        constexpr locale(const locale &other) : m_str(other.m_str) { }
+
+        constexpr locale &operator=(const locale &other) {
+            m_str = other.m_str;
+            return *this;
+        }
+
+        constexpr locale(locale &&other) noexcept : m_str(std::move(other.m_str)) { }
+
+        constexpr locale &operator=(locale &&other) noexcept {
+            m_str = std::move(other.m_str);
+            return *this;
+        }
+
+        constexpr std::string_view str() const noexcept { return m_str; }
+
+        parsed_locale parse() const noexcept;
+
+        void strip_encoding();
+
+        constexpr bool operator==(const locale &other) const noexcept { return m_str == other.m_str; }
+    };
+
     namespace detail {
-        class API_PUBLIC alternative_locales {
-            struct end_tag { };
-
-            class iter {
-                std::string_view m_modifier;
-                std::string m_str;
-
-            public:
-                using difference_type = std::ptrdiff_t;
-                using value_type      = std::string;
-
-                iter(std::string_view orig);
-                iter(const iter &other);
-
-                const std::string &operator*() const noexcept;
-
-                iter &operator++();
-                iter operator++(int);
-
-                bool operator==(end_tag) const noexcept { return m_str.empty(); }
-            };
-
-            std::string_view m_str;
+        class API_PUBLIC alternative_locales_iterator {
+            std::string_view m_modifier;
+            locale m_locale;
 
         public:
-            alternative_locales(std::string_view str);
+            alternative_locales_iterator(locale locale);
 
-            iter begin() const { return iter(m_str); }
+            alternative_locales_iterator(std::string_view str) :
+                    alternative_locales_iterator(locale(str)) { }
 
-            end_tag end() const noexcept { return {}; }
+            const locale &operator*() const noexcept;
+
+            alternative_locales_iterator &operator++();
+
+            bool operator==(std::default_sentinel_t) const noexcept;
         };
+
+        inline alternative_locales_iterator begin(alternative_locales_iterator it) {
+            return it;
+        }
+
+        constexpr std::default_sentinel_t end(const alternative_locales_iterator &) {
+            return {};
+        }
 
         template<class T>
         class API_PUBLIC localized_data {
             T m_generic {};
-            std::unordered_map<std::string, T> m_translations {};
+            std::unordered_map<locale, T> m_translations {};
 
         public:
             localized_data() = default;
@@ -107,10 +143,10 @@ namespace xdg::desktop_entry_spec {
                 m_translations.emplace(lang, std::move(val));
             }
 
-            const T *get(std::string_view locale) {
-                if (!locale.empty()) {
-                    for (const auto &str : alternative_locales(locale)) {
-                        if (auto it = m_translations.find(str); it != m_translations.end()) {
+            const T *get(std::string_view locale_str) {
+                if (!locale_str.empty()) {
+                    for (const auto &locale : alternative_locales_iterator(locale_str)) {
+                        if (auto it = m_translations.find(locale); it != m_translations.end()) {
                             return std::addressof(it->second);
                         }
                     }
@@ -126,6 +162,8 @@ namespace xdg::desktop_entry_spec {
     class API_PUBLIC desktop_entry {
     public:
         desktop_entry(std::istream &is);
+        desktop_entry(std::istream &&is);
+        desktop_entry(std::filesystem::path store, std::filesystem::path relative_path);
 
         entry_type get_type() const noexcept {
             return std::any_cast<entry_type>(get_well_known_value(well_known_keys::Type));
@@ -151,8 +189,8 @@ namespace xdg::desktop_entry_spec {
             return get_well_known_typed<localized_string>(well_known_keys::Comment);
         }
 
-        std::string_view get_icon() const noexcept {
-            return get_well_known_string(well_known_keys::Icon);
+        const localized_string *get_icon() const noexcept {
+            return get_well_known_typed<localized_string>(well_known_keys::Icon);
         }
 
         bool get_hidden() const noexcept {
@@ -227,7 +265,10 @@ namespace xdg::desktop_entry_spec {
             return get_well_known_bool<false>(well_known_keys::SingleMainWindow);
         }
 
+        std::string get_id() const;
+
     private:
+        // TODO
         bool check_required_keys() const noexcept;
 
         constexpr const std::any &get_well_known_value(well_known_keys val) const noexcept {
@@ -268,9 +309,22 @@ namespace xdg::desktop_entry_spec {
             }
         }
 
+        std::filesystem::path m_store {};
+        std::filesystem::path m_relative_path {};
         std::array<std::any, size_t(well_known_keys::Last) + 1> m_well_known_keys {};
     };
 
+    API_PUBLIC std::vector<std::unique_ptr<desktop_entry>> get_all_desktop_entries();
 } // namespace xdg::desktop_entry_spec
 
+namespace std {
+    template<>
+    struct hash<xdg::desktop_entry_spec::locale> {
+        hash<std::string_view> m_str_hash {};
+
+        size_t operator()(const xdg::desktop_entry_spec::locale &locale) const {
+            return m_str_hash(locale.str());
+        }
+    };
+} // namespace std
 #endif
