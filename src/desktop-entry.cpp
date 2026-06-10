@@ -258,6 +258,39 @@ namespace {
             val,
             out);
     }
+
+    struct parsed_language {
+        std::string_view lang;
+        std::string_view country;
+        std::string_view encoding;
+        std::string_view modifier;
+    };
+
+    parsed_language parse_language(std::string_view lang) {
+        parsed_language res {};
+
+        auto delimiter = lang.find_first_of("_.@");
+        res.lang       = lang.substr(0, delimiter);
+
+        if (delimiter != std::string_view::npos && lang.at(delimiter) == '_') {
+            auto start_pos = delimiter + 1;
+            delimiter      = lang.find_first_of(".@", start_pos);
+            res.country    = lang.substr(start_pos, delimiter - start_pos);
+        }
+
+        if (delimiter != std::string_view::npos && lang.at(delimiter) == '.') {
+            auto start_pos = delimiter + 1;
+            delimiter      = lang.find_first_of("@", start_pos);
+            res.encoding   = lang.substr(start_pos, delimiter - start_pos);
+        }
+
+        if (delimiter != std::string_view::npos) {
+            assert(lang.at(delimiter) == '@');
+            res.modifier = lang.substr(delimiter + 1);
+        }
+
+        return res;
+    }
 } // namespace
 
 namespace xdg::desktop_entry_spec {
@@ -318,6 +351,34 @@ namespace xdg::desktop_entry_spec {
         }
         return is;
     }
+
+    namespace detail {
+        alternative_locales::alternative_locales_iter &alternative_locales::alternative_locales_iter::operator++() {
+            auto parsed_orig    = parse_language(m_orig_str);
+            auto parsed_current = parse_language(m_str);
+
+            assert(!parsed_current.lang.empty());
+            if (parsed_current.modifier.empty() && parsed_current.country.empty()) {
+                m_str = {};
+            } else if (!parsed_current.modifier.empty()) {
+                std::string new_str {parsed_current.lang};
+                if (!parsed_current.country.empty()) {
+                    new_str.push_back('_');
+                    new_str.append(parsed_current.country);
+                }
+                m_str = std::move(new_str);
+            } else if (!parsed_current.country.empty()) {
+                std::string new_str {parsed_current.lang};
+                if (!parsed_orig.modifier.empty()) {
+                    new_str.push_back('@');
+                    new_str.append(parsed_orig.modifier);
+                }
+                m_str = std::move(new_str);
+            }
+
+            return *this;
+        }
+    } // namespace detail
 
     desktop_entry::desktop_entry(std::istream &is) {
         std::string section;

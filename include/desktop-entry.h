@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <iostream>
 #include <optional>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -52,8 +53,61 @@ namespace xdg::desktop_entry_spec {
     std::istream &operator>>(std::istream &is, entry_type &out);
 
     namespace detail {
+        inline std::string strip_encoding(std::string str) {
+            // TODO
+            return str;
+        }
+
+        inline std::string strip_encoding(std::string_view str) {
+            return strip_encoding(std::string(str));
+        }
+
+        class alternative_locales {
+            struct end_tag { };
+
+            class alternative_locales_iter {
+                const std::string &m_orig_str;
+                std::string m_str;
+
+            public:
+                using difference_type = std::ptrdiff_t;
+                using value_type      = std::string;
+
+                alternative_locales_iter(const std::string &orig) :
+                        m_orig_str(orig), m_str(orig) { }
+
+                alternative_locales_iter(const alternative_locales_iter &other) :
+                        m_orig_str(other.m_orig_str), m_str(other.m_str) { }
+
+                const std::string &operator*() const noexcept { return m_str; }
+
+                LIBXDGDESKTOPENTRY_PUBLIC alternative_locales_iter &operator++();
+
+                alternative_locales_iter operator++(int) {
+                    alternative_locales_iter it = *this;
+                    ++(*this);
+                    return it;
+                }
+
+                bool operator==(end_tag) const noexcept { return m_str.empty(); }
+
+                friend bool operator==(end_tag tag, const alternative_locales_iter &self) {
+                    return self == tag;
+                }
+            };
+
+            std::string m_str;
+
+        public:
+            alternative_locales(std::string str) : m_str(std::move(str)) { }
+
+            alternative_locales_iter begin() const { return alternative_locales_iter(m_str); }
+
+            end_tag end() const noexcept { return {}; }
+        };
+
         template<class T>
-        class localized_data {
+        class LIBXDGDESKTOPENTRY_PUBLIC localized_data {
             T m_generic {};
             std::unordered_map<std::string, T> m_translations {};
 
@@ -64,14 +118,25 @@ namespace xdg::desktop_entry_spec {
                 if (lang.empty()) {
                     set_generic(std::move(val));
                 } else {
-                    set_translated(lang, std::move(val));
+                    add_translated(lang, std::move(val));
                 }
             }
 
             void set_generic(T val) { m_generic = std::move(val); }
 
-            void set_translated(std::string_view lang, T val) {
+            void add_translated(std::string_view lang, T val) {
                 m_translations.emplace(lang, std::move(val));
+            }
+
+            const T *get(std::string_view locale) {
+                if (!locale.empty()) {
+                    for (const auto &str : alternative_locales(std::string(locale))) {
+                        if (auto it = m_translations.find(str); it != m_translations.end()) {
+                            return std::addressof(it->second);
+                        }
+                    }
+                }
+                return std::addressof(m_generic);
             }
         };
     } // namespace detail
