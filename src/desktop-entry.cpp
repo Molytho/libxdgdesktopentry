@@ -467,12 +467,22 @@ namespace xdg::desktop_entry_spec {
         }
     }
 
-    desktop_entry::desktop_entry(std::istream &&is) : desktop_entry(is) { }
+    desktop_entry::desktop_entry(std::istream &&is) : desktop_entry(is) {
+        if (!check_required_keys()) {
+            throw std::runtime_error("desktop_entry has missing keys");
+        }
+    }
 
     desktop_entry::desktop_entry(path store, path relative_path) :
             desktop_entry(std::ifstream(store / relative_path)) {
         m_store         = std::move(store);
         m_relative_path = std::move(relative_path);
+    }
+
+    bool desktop_entry::check_required_keys() const noexcept {
+        return get_well_known_value(well_known_keys::Type).has_value()
+               && get_well_known_value(well_known_keys::Name).has_value()
+               && (get_type() != entry_type::Link || get_well_known_value(well_known_keys::Type).has_value());
     }
 
     std::string desktop_entry::get_id() const {

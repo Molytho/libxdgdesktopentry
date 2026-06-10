@@ -268,7 +268,6 @@ namespace xdg::desktop_entry_spec {
         std::string get_id() const;
 
     private:
-        // TODO
         bool check_required_keys() const noexcept;
 
         constexpr const std::any &get_well_known_value(well_known_keys val) const noexcept {
