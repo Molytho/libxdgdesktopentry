@@ -14,6 +14,8 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/regex.hpp>
 
+#include "xdg_base_directory.h"
+
 using namespace std::string_view_literals;
 using namespace xdg::desktop_entry_spec;
 using namespace std::filesystem;
@@ -272,8 +274,11 @@ namespace {
         std::forward_list<path> m_str;
 
     public:
-        xdg_data_dir_iterator() : m_str({"/home/robin/.local/share", "/usr/share/"}) {
-            // TODO/FIXME
+        xdg_data_dir_iterator() : m_str({xdg::base_directory::get_data_home()}) {
+            auto dirs = xdg::base_directory::get_data_dirs();
+            m_str.insert_after(m_str.begin(),
+                std::make_move_iterator(dirs.begin()),
+                std::make_move_iterator(dirs.end()));
         }
 
         path &operator*() {
@@ -500,26 +505,33 @@ namespace xdg::desktop_entry_spec {
 
         for (auto &application_dir : xdg_data_dir_iterator()) {
             application_dir /= "applications";
-            for (const auto &file : recursive_directory_iterator(application_dir,
-                     directory_options::follow_directory_symlink | directory_options::skip_permission_denied)) {
-                if (file.path().extension() != ".desktop") {
-                    continue;
-                }
+            try {
+                for (const auto &file : recursive_directory_iterator(application_dir,
+                         directory_options::follow_directory_symlink | directory_options::skip_permission_denied)) {
+                    if (file.path().extension() != ".desktop") {
+                        continue;
+                    }
 
-                std::unique_ptr<desktop_entry> entry;
-                try {
-                    entry = std::make_unique<desktop_entry>(application_dir,
-                        file.path().lexically_relative(application_dir));
-                } catch (const std::runtime_error &ex) {
-                    // TODO: Specific exception
-                    std::cerr << "Failed to parse desktop file: " << file << '\n';
+                    std::unique_ptr<desktop_entry> entry;
+                    try {
+                        entry = std::make_unique<desktop_entry>(application_dir,
+                            file.path().lexically_relative(application_dir));
+                    } catch (const std::runtime_error &ex) {
+                        // TODO: Specific exception
+                        std::cerr << "Failed to parse desktop file: " << file << '\n';
+                        continue;
+                    }
+                    auto emplace_res = ids_read.emplace(entry->get_id());
+                    if (emplace_res.second) {
+                        // Entry is new
+                        result.emplace_back(std::move(entry));
+                    }
+                }
+            } catch (const filesystem_error &ex) {
+                if (ex.code() == std::errc::no_such_file_or_directory) {
                     continue;
                 }
-                auto emplace_res = ids_read.emplace(entry->get_id());
-                if (emplace_res.second) {
-                    // Entry is new
-                    result.emplace_back(std::move(entry));
-                }
+                throw;
             }
         }
 

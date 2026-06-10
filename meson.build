@@ -16,6 +16,7 @@ lib_args = ['-DBUILDING_LIBXDGDESKTOPENTRY']
 
 sources = [
     'src/desktop-entry.cpp',
+    'src/xdg_base_directory.cpp'
 ]
 
 includes = [include_directories('include')]
