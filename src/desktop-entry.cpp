@@ -275,7 +275,7 @@ namespace {
 
     public:
         xdg_data_dir_iterator() : m_str({xdg::basedir::get_data_home()}) {
-            auto dirs = xdg::basedir::get_data_dirs_as_list();
+            auto dirs = xdg::basedir::get_data_dirs();
             m_str.insert_after(m_str.begin(),
                 std::make_move_iterator(dirs.begin()),
                 std::make_move_iterator(dirs.end()));
