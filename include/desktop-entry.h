@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "private/helper.h"
+#include "helper.h"
 
 namespace xdg::desktop_entry_spec {
     enum class well_known_keys : uint8_t {
@@ -98,7 +98,7 @@ namespace xdg::desktop_entry_spec {
 
     namespace detail {
         template<class T>
-        class API_PUBLIC localized_data {
+        class localized_data {
             T m_generic {};
             std::unordered_map<locale, T> m_translations {};
 
@@ -111,9 +111,9 @@ namespace xdg::desktop_entry_spec {
 
             void add_translated(std::string_view lang, T val);
 
-            const T &get() const;
+            API_PUBLIC const T &get() const;
 
-            const T &get(std::string_view locale_str) const;
+            API_PUBLIC const T &get(std::string_view locale_str) const;
         };
     } // namespace detail
 

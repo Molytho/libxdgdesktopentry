@@ -14,7 +14,7 @@ dependencies = [
 # not the executables that use the library.
 lib_args = ['-DBUILDING_LIBXDGDESKTOPENTRY']
 
-sources = ['src/desktop-entry.cpp']
+sources = ['src/desktop-entry.cpp', 'src/basedir.cpp']
 
 includes = [include_directories('include')]
 
@@ -49,8 +49,7 @@ meson.override_dependency('xdgdesktopentry++', xdgdesktopentry_dep)
 install_headers(
     'include/desktop-entry.h',
     'include/basedir.h',
-    'include/private/helper.h',
-    'include/private/string_helper.h',
+    'include/helper.h',
 )
 
 pkg_mod = import('pkgconfig')
