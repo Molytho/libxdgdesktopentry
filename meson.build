@@ -14,7 +14,7 @@ dependencies = [
 # not the executables that use the library.
 lib_args = ['-DBUILDING_LIBXDGDESKTOPENTRY']
 
-sources = ['src/desktop-entry.cpp', 'src/private/xdg_base_directory.cpp']
+sources = ['src/desktop-entry.cpp']
 
 includes = [include_directories('include')]
 
@@ -48,9 +48,9 @@ meson.override_dependency('xdgdesktopentry++', xdgdesktopentry_dep)
 # package manager.
 install_headers(
     'include/desktop-entry.h',
+    'include/basedir.h',
     'include/private/helper.h',
     'include/private/string_helper.h',
-    'include/private/xdg_base_directory.h',
 )
 
 pkg_mod = import('pkgconfig')

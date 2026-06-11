@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <string_view>
 
-namespace xdg::desktop_entry_spec::detail::utils {
+namespace xdg::detail::utils {
     class string_spliterator {
         char m_delimiter;
         bool m_ended;

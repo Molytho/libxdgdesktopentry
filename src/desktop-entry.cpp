@@ -14,8 +14,8 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/regex.hpp>
 
+#include "basedir.h"
 #include "private/string_helper.h"
-#include "private/xdg_base_directory.h"
 
 using namespace std::string_view_literals;
 using namespace xdg::desktop_entry_spec;
@@ -194,7 +194,7 @@ namespace {
             }
 
             std::vector<std::string> values;
-            for (const auto &str : detail::utils::string_spliterator(value, ';')) {
+            for (const auto &str : xdg::detail::utils::string_spliterator(value, ';')) {
                 if (!str.empty()) {
                     values.emplace_back(str);
                 }
@@ -274,8 +274,8 @@ namespace {
         std::forward_list<path> m_str;
 
     public:
-        xdg_data_dir_iterator() : m_str({detail::xdg::base_directory::get_data_home()}) {
-            auto dirs = detail::xdg::base_directory::get_data_dirs();
+        xdg_data_dir_iterator() : m_str({xdg::basedir::get_data_home()}) {
+            auto dirs = xdg::basedir::get_data_dirs_as_list();
             m_str.insert_after(m_str.begin(),
                 std::make_move_iterator(dirs.begin()),
                 std::make_move_iterator(dirs.end()));
