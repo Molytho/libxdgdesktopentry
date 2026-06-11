@@ -1,8 +1,10 @@
-#include "xdg_base_directory.h"
+#include "private/xdg_base_directory.h"
 
 #include <cstdlib>
 
-#include "string_helper.h"
+#include "private/string_helper.h"
+
+using namespace xdg::desktop_entry_spec;
 
 namespace {
     constexpr std::string_view XdgDataDirsDefault = "/usr/local/share/:/usr/share/";
@@ -10,7 +12,7 @@ namespace {
     std::string get_home_var() {
         auto var = getenv("HOME");
         if (!var) {
-            throw xdg::base_directory::mandatory_envvar_missing("HOME");
+            throw detail::xdg::base_directory::mandatory_envvar_missing("HOME");
         }
         return var;
     }
@@ -31,13 +33,13 @@ namespace {
         if (path.is_relative()) {
             std::stringstream strstr;
             strstr << name << " or HOME";
-            throw xdg::base_directory::mandatory_envvar_relative(std::move(strstr.str()));
+            throw detail::xdg::base_directory::mandatory_envvar_relative(std::move(strstr.str()));
         }
         return path;
     }
 } // namespace
 
-namespace xdg::base_directory {
+namespace xdg::desktop_entry_spec::detail::xdg::base_directory {
     std::filesystem::path get_data_home() {
         return get_var_or_default("XDG_DATA_HOME", "/.local/share");
     }
@@ -48,10 +50,10 @@ namespace xdg::base_directory {
             env = XdgDataDirsDefault;
         }
         std::vector<std::filesystem::path> res;
-        for (const auto &str : utils::string_spliterator(env, ':')) {
+        for (const auto &str : ::xdg::desktop_entry_spec::detail::utils::string_spliterator(env, ':')) {
             res.push_back(str);
         }
         return res;
     }
 
-} // namespace xdg::base_directory
+} // namespace xdg::desktop_entry_spec::detail::xdg::base_directory

@@ -3,6 +3,7 @@
 
 #include <any>
 #include <array>
+#include <clocale>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -13,7 +14,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "helper.h"
+#include "private/helper.h"
 
 namespace xdg::desktop_entry_spec {
     enum class well_known_keys : uint8_t {
@@ -62,7 +63,7 @@ namespace xdg::desktop_entry_spec {
         std::string_view modifier;
     };
 
-    class locale {
+    class API_PUBLIC locale {
         std::string m_str;
 
     public:
@@ -92,7 +93,9 @@ namespace xdg::desktop_entry_spec {
 
         void strip_encoding();
 
-        constexpr bool operator==(const locale &other) const noexcept { return m_str == other.m_str; }
+        constexpr bool operator==(const locale &other) const noexcept {
+            return m_str == other.m_str;
+        }
     };
 
     namespace detail {
@@ -143,15 +146,23 @@ namespace xdg::desktop_entry_spec {
                 m_translations.emplace(lang, std::move(val));
             }
 
-            const T *get(std::string_view locale_str) {
+            const T &get() const {
+                auto locale = std::setlocale(LC_MESSAGES, "");
+                if (!locale) {
+                    throw std::runtime_error("Failed to get locale");
+                }
+                return get(locale);
+            }
+
+            const T &get(std::string_view locale_str) const {
                 if (!locale_str.empty()) {
                     for (const auto &locale : alternative_locales_iterator(locale_str)) {
                         if (auto it = m_translations.find(locale); it != m_translations.end()) {
-                            return std::addressof(it->second);
+                            return it->second;
                         }
                     }
                 }
-                return std::addressof(m_generic);
+                return m_generic;
             }
         };
     } // namespace detail
@@ -266,6 +277,8 @@ namespace xdg::desktop_entry_spec {
         }
 
         std::string get_id() const;
+
+        bool should_show() const;
 
     private:
         bool check_required_keys() const noexcept;

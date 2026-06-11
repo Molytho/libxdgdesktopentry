@@ -14,12 +14,14 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/regex.hpp>
 
-#include "string_helper.h"
-#include "xdg_base_directory.h"
+#include "private/string_helper.h"
+#include "private/xdg_base_directory.h"
 
 using namespace std::string_view_literals;
 using namespace xdg::desktop_entry_spec;
 using namespace std::filesystem;
+
+using namespace xdg::desktop_entry_spec;
 
 namespace {
     constexpr std::array well_known_keys_name {
@@ -192,7 +194,7 @@ namespace {
             }
 
             std::vector<std::string> values;
-            for (const auto &str : utils::string_spliterator(value, ';')) {
+            for (const auto &str : detail::utils::string_spliterator(value, ';')) {
                 if (!str.empty()) {
                     values.emplace_back(str);
                 }
@@ -272,8 +274,8 @@ namespace {
         std::forward_list<path> m_str;
 
     public:
-        xdg_data_dir_iterator() : m_str({xdg::base_directory::get_data_home()}) {
-            auto dirs = xdg::base_directory::get_data_dirs();
+        xdg_data_dir_iterator() : m_str({detail::xdg::base_directory::get_data_home()}) {
+            auto dirs = detail::xdg::base_directory::get_data_dirs();
             m_str.insert_after(m_str.begin(),
                 std::make_move_iterator(dirs.begin()),
                 std::make_move_iterator(dirs.end()));
@@ -495,6 +497,27 @@ namespace xdg::desktop_entry_spec {
         std::string res = m_relative_path.string();
         std::ranges::replace(res, '/', '-');
         return res;
+    }
+
+    bool desktop_entry::should_show() const {
+        if (get_no_display() || get_hidden()) {
+            return false;
+        }
+
+        std::string_view current_desktop = std::getenv("XDG_CURRENT_DESKTOP");
+        auto only_show_in                = get_only_show_in();
+        if (only_show_in) {
+            auto it = std::ranges::find(*only_show_in, current_desktop);
+            return it != only_show_in->end();
+        }
+
+        auto no_show_in = get_not_show_in();
+        if (no_show_in) {
+            auto it = std::ranges::find(*no_show_in, current_desktop);
+            return it == no_show_in->end();
+        }
+
+        return true;
     }
 
     std::vector<std::unique_ptr<desktop_entry>> get_all_desktop_entries() {

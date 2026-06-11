@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace xdg::base_directory {
+namespace xdg::desktop_entry_spec::detail::xdg::base_directory {
     class mandatory_envvar_missing : public std::runtime_error {
         using std::runtime_error::runtime_error;
     };

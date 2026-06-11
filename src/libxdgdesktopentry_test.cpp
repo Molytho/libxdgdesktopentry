@@ -1,9 +1,15 @@
 #include "desktop-entry.h"
 
+#include <iostream>
+
 int main(int, char **) {
     auto all = xdg::desktop_entry_spec::get_all_desktop_entries();
     if (all.empty()) {
         return 0;
+    }
+    for (const auto &it : all) {
+        [[maybe_unused]] auto res = it->should_show();
+        std::cout << res << '\n';
     }
 
     xdg::desktop_entry_spec::desktop_entry &entry = *all.front();
@@ -11,6 +17,7 @@ int main(int, char **) {
     [[maybe_unused]] auto type = entry.get_type();
     [[maybe_unused]] auto name = entry.get_name();
 
+    [[maybe_unused]] auto current_locale        = name.get();
     [[maybe_unused]] auto name_de               = name.get("de");
     [[maybe_unused]] auto name_de_DE            = name.get("de_DE");
     [[maybe_unused]] auto name_de_DE_mod        = name.get("de_DE@Latn");
