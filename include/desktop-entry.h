@@ -3,11 +3,9 @@
 
 #include <any>
 #include <array>
-#include <clocale>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -99,31 +97,6 @@ namespace xdg::desktop_entry_spec {
     };
 
     namespace detail {
-        class API_PUBLIC alternative_locales_iterator {
-            std::string_view m_modifier;
-            locale m_locale;
-
-        public:
-            alternative_locales_iterator(locale locale);
-
-            alternative_locales_iterator(std::string_view str) :
-                    alternative_locales_iterator(locale(str)) { }
-
-            const locale &operator*() const noexcept;
-
-            alternative_locales_iterator &operator++();
-
-            bool operator==(std::default_sentinel_t) const noexcept;
-        };
-
-        inline alternative_locales_iterator begin(alternative_locales_iterator it) {
-            return it;
-        }
-
-        constexpr std::default_sentinel_t end(const alternative_locales_iterator &) {
-            return {};
-        }
-
         template<class T>
         class API_PUBLIC localized_data {
             T m_generic {};
@@ -132,38 +105,15 @@ namespace xdg::desktop_entry_spec {
         public:
             localized_data() = default;
 
-            void add(std::string_view lang, T val) {
-                if (lang.empty()) {
-                    set_generic(std::move(val));
-                } else {
-                    add_translated(lang, std::move(val));
-                }
-            }
+            void add(std::string_view lang, T val);
 
-            void set_generic(T val) { m_generic = std::move(val); }
+            void set_generic(T val);
 
-            void add_translated(std::string_view lang, T val) {
-                m_translations.emplace(lang, std::move(val));
-            }
+            void add_translated(std::string_view lang, T val);
 
-            const T &get() const {
-                auto locale = std::setlocale(LC_MESSAGES, "");
-                if (!locale) {
-                    throw std::runtime_error("Failed to get locale");
-                }
-                return get(locale);
-            }
+            const T &get() const;
 
-            const T &get(std::string_view locale_str) const {
-                if (!locale_str.empty()) {
-                    for (const auto &locale : alternative_locales_iterator(locale_str)) {
-                        if (auto it = m_translations.find(locale); it != m_translations.end()) {
-                            return it->second;
-                        }
-                    }
-                }
-                return m_generic;
-            }
+            const T &get(std::string_view locale_str) const;
         };
     } // namespace detail
 
