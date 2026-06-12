@@ -1,25 +1,25 @@
 project(
-    'xdgdesktopentry++',
+    'xdgpp',
     'cpp',
     version: '0.1',
-    meson_version: '>= 1.3.0',
+    meson_version: '>= 1.9.0',
     default_options: ['warning_level=3', 'werror=true', 'cpp_std=c++20'],
 )
 
+sources = ['src/basedir.cpp', 'src/desktop-entry.cpp']
+
+includes = [include_directories('include')]
+
 dependencies = [
-    dependency('boost', modules: ['regex', 'lexical_cast']),
+    dependency('boost', modules: ['regex']),
 ]
 
 # These arguments are only used to build the shared library
 # not the executables that use the library.
-lib_args = ['-DBUILDING_LIBXDGDESKTOPENTRY']
-
-sources = ['src/desktop-entry.cpp', 'src/basedir.cpp']
-
-includes = [include_directories('include')]
+lib_args = ['-DBUILDING_LIBXDGPP']
 
 lib = library(
-    'xdgdesktopentry',
+    'xdgpp',
     sources,
     include_directories: includes,
     install: true,
@@ -29,20 +29,20 @@ lib = library(
 )
 
 test_exe = executable(
-    'xdgdesktopentry_test',
-    'src/libxdgdesktopentry_test.cpp',
+    'xdgpp_test',
+    'test/xdgpp_test.cpp',
     include_directories: includes,
     link_with: lib,
 )
-test('xdgdesktopentry', test_exe)
+test('xdgpp', test_exe)
 
 # Make this library usable as a Meson subproject.
-xdgdesktopentry_dep = declare_dependency(
+xdgpp_dep = declare_dependency(
     include_directories: includes,
     dependencies: dependencies,
     link_with: lib,
 )
-meson.override_dependency('xdgdesktopentry++', xdgdesktopentry_dep)
+meson.override_dependency('xdgpp', xdgpp_dep)
 
 # Make this library usable from the system's
 # package manager.
@@ -50,11 +50,16 @@ install_headers(
     'include/desktop-entry.h',
     'include/basedir.h',
     'include/helper.h',
+    subdir: 'xdgpp',
 )
 
 pkg_mod = import('pkgconfig')
 pkg_mod.generate(
     lib,
-    description: 'Meson sample project.',
-    subdirs: 'xdgdesktopentry',
+    description: 'A C++ library implementing the xdg basedir and xdg desktop-entry spec',
+    filebase: 'xdgpp',
+    name: 'xdgpp',
+    subdirs: 'xdgpp',
+    url: 'https://github.com/molytho/xdgpp',
+    license: 'GPL-3.0-or-later'
 )
