@@ -97,6 +97,8 @@ namespace xdg::desktop_entry_spec {
     };
 
     namespace detail {
+        class desktop_entry_parser;
+
         template<class T>
         class localized_data {
             T m_generic {};
@@ -123,7 +125,6 @@ namespace xdg::desktop_entry_spec {
     class API_PUBLIC desktop_entry {
     public:
         desktop_entry(std::istream &is);
-        desktop_entry(std::istream &&is);
         desktop_entry(std::filesystem::path store, std::filesystem::path relative_path);
 
         entry_type get_type() const noexcept {
@@ -231,6 +232,9 @@ namespace xdg::desktop_entry_spec {
         bool should_show() const;
 
     private:
+        desktop_entry();
+        desktop_entry(std::istream &&is);
+
         bool check_required_keys() const noexcept;
 
         constexpr const std::any &get_well_known_value(well_known_keys val) const noexcept {
@@ -270,6 +274,8 @@ namespace xdg::desktop_entry_spec {
                 return val.has_value() ? std::addressof(std::any_cast<const T &>(val)) : nullptr;
             }
         }
+
+        friend detail::desktop_entry_parser;
 
         std::filesystem::path m_store {};
         std::filesystem::path m_relative_path {};
