@@ -390,4 +390,6 @@ namespace xdg::desktop_entry_spec {
 
         return result;
     }
+
+    application_action::application_action(std::string id) : m_id(std::move(id)) { }
 } // namespace xdg::desktop_entry_spec

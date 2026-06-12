@@ -8,13 +8,15 @@ namespace xdg::desktop_entry_spec::detail {
         desktop_entry &m_target;
 
         bool m_is_main_section {false};
-        bool m_is_action_section {false};
+        bool m_skip_section {false};
         std::string m_current_section {};
-        std::string_view m_action_name {};
+        application_action *m_current_action {};
 
         void update_current_section(std::string_view section);
         void parse_key_value_line(std::string str);
         bool entry_has_action(std::string_view str);
+        void reset_flags() noexcept;
+        void check_for_required_keys();
 
     public:
         desktop_entry_parser(desktop_entry &target);

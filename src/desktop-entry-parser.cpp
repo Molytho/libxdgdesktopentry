@@ -16,6 +16,9 @@ using namespace xdg::desktop_entry_spec;
 using namespace std::filesystem;
 
 namespace {
+    constexpr std::string_view MainSectionName      = "Desktop Entry";
+    constexpr std::string_view ActionSectionPrelude = "Desktop Action ";
+
     boost::regex IsCommentRe {"^[ \\t]*(?:#.*)?$", boost::regex_constants::flag_type_::optimize};
     boost::regex IsGroupHeadRe {"^[ \\t]*\\[([ -Z\\\\^-~]+)\\][ \\t]*$", boost::regex_constants::flag_type_::optimize};
     boost::regex IsKeyParsingRe {
@@ -64,7 +67,7 @@ namespace {
     struct parse_as_helper<entry_type> {
         static constexpr bool is_type(well_known_keys val) { return val == well_known_keys::Type; }
 
-        static void parse(const key_value_match &val, std::any &out) {
+        static void parse(const key_value_match &val, entry_type &out) {
             auto parsed = entry_type_from_string(val.value);
             if (!val.locale.empty()) {
                 throw std::runtime_error("Type value cannot be localized");
@@ -92,7 +95,7 @@ namespace {
             return std::ranges::binary_search(string_types, val);
         }
 
-        static void parse(const key_value_match &val, std::any &out) {
+        static void parse(const key_value_match &val, std::string &out) {
             if (!val.locale.empty()) {
                 throw std::runtime_error("String values cannot be localized");
             }
@@ -117,7 +120,7 @@ namespace {
             return std::ranges::binary_search(bool_types, val);
         }
 
-        static void parse(const key_value_match &val, std::any &out) {
+        static void parse(const key_value_match &val, bool &out) {
             if (!val.locale.empty()) {
                 throw std::runtime_error("bool values cant be localized");
             }
@@ -163,7 +166,7 @@ namespace {
             return values;
         }
 
-        static void parse(const key_value_match &val, std::any &out) {
+        static void parse(const key_value_match &val, std::vector<std::string> &out) {
             if (!val.locale.empty()) {
                 throw std::runtime_error("string list values cant be localized");
             }
@@ -186,12 +189,8 @@ namespace {
             return std::ranges::binary_search(localized_string_type, val);
         }
 
-        static void parse(const key_value_match &val, std::any &out) {
-            if (!out.has_value()) {
-                out = localized_string();
-            }
-            auto &buf = std::any_cast<localized_string &>(out);
-            buf.add(val.locale, std::string(val.value));
+        static void parse(const key_value_match &val, localized_string &out) {
+            out.add(val.locale, std::string(val.value));
         }
     };
 
@@ -201,21 +200,19 @@ namespace {
             return val == well_known_keys::Keywords;
         }
 
-        static void parse(const key_value_match &val, std::any &out) {
-            if (!out.has_value()) {
-                out = localized_string_list();
-            }
-            auto &buf = std::any_cast<localized_string_list &>(out);
-
+        static void parse(const key_value_match &val, localized_string_list &out) {
             auto parsed = parse_as_helper<std::vector<std::string>>::parse_as_vector(val.value);
-            buf.add(val.locale, std::move(parsed));
+            out.add(val.locale, std::move(parsed));
         }
     };
 
     template<class T, class... Args>
     void parse_into_impl(well_known_keys key, const key_value_match &val, std::any &out) {
         if (parse_as_helper<T>::is_type(key)) {
-            parse_as_helper<T>::parse(val, out);
+            if (!out.has_value()) {
+                out = T();
+            }
+            parse_as_helper<T>::parse(val, std::any_cast<T &>(out));
         } else {
             if constexpr (sizeof...(Args) > 0) {
                 parse_into_impl<Args...>(key, val, out);
@@ -230,17 +227,71 @@ namespace {
             val,
             out);
     }
+
+    template<class T>
+    void parse_well_know_key(well_known_keys key, const key_value_match &val, T &out) {
+        if (!parse_as_helper<T>::is_type(key)) {
+            throw std::logic_error("Tried to parse well know key with wrong type");
+        }
+        parse_as_helper<T>::parse(val, out);
+    }
+
+    bool key_is_valid(entry_type type) noexcept {
+        return type >= xdg::desktop_entry_spec::entry_type::First
+               && type <= xdg::desktop_entry_spec::entry_type::Last;
+    }
+
+    bool key_is_valid(const std::string &str) noexcept {
+        return !str.empty();
+    }
+
+    bool key_is_valid(std::string_view view) noexcept {
+        return !view.empty();
+    }
+
+    [[maybe_unused]] bool key_is_valid(const std::vector<std::string> &vec) noexcept {
+        return !vec.empty();
+    }
+
+    bool key_is_valid(const localized_string &lstr) noexcept {
+        return !lstr.get("").empty();
+    }
+
+    [[maybe_unused]] bool key_is_valid(const localized_string_list &lstrlist) noexcept {
+        return !lstrlist.get("").empty();
+    }
+
+    template<class T>
+        requires requires(const T &ref) {
+            { key_is_valid(ref) } -> std::same_as<bool>;
+        }
+    bool key_is_valid(const T *ptr) {
+        return ptr && key_is_valid(*ptr);
+    }
 } // namespace
 
 namespace xdg::desktop_entry_spec::detail {
+    void desktop_entry_parser::reset_flags() noexcept {
+        m_is_main_section = false;
+        m_skip_section    = false;
+        m_current_action  = nullptr;
+    }
+
     void desktop_entry_parser::update_current_section(std::string_view section) {
+        check_for_required_keys();
         m_current_section = section;
-        if (section == "Desktop Entry") {
-            m_is_main_section   = true;
-            m_is_action_section = false;
-        } else {
-            m_is_main_section   = false;
-            m_is_action_section = false;
+        reset_flags();
+        if (m_current_section == MainSectionName) {
+            m_is_main_section = true;
+        } else if (m_current_section.starts_with(ActionSectionPrelude)) {
+            auto action_name = std::string_view(m_current_section).substr(ActionSectionPrelude.size());
+            if (!entry_has_action(action_name)) {
+                std::cerr << "Warning: desktop entry has invalid action section\n";
+                m_skip_section = true;
+                return;
+            }
+            m_target.m_actions.emplace_back(std::string(action_name));
+            m_current_action = std::addressof(m_target.m_actions.back());
         }
     }
 
@@ -252,17 +303,52 @@ namespace xdg::desktop_entry_spec::detail {
             } else {
                 // TODO
             }
+        } else if (m_current_action) {
+            if (auto well_known_key = well_known_keys_from_string(parse_result.key); well_known_key) {
+                switch (*well_known_key) {
+                case well_known_keys::Name:
+                    parse_well_know_key(well_known_keys::Name, parse_result, m_current_action->m_name);
+                    return;
+                case well_known_keys::Icon:
+                    parse_well_know_key(well_known_keys::Icon, parse_result, m_current_action->m_icon);
+                    return;
+                case well_known_keys::Exec:
+                    parse_well_know_key<std::string>(well_known_keys::Exec,
+                        parse_result,
+                        m_current_action->m_exec);
+                    return;
+                default:
+                    break;
+                }
+            }
+            // TODO: else and fallthrough
         } else {
             // TODO
         }
     }
 
     bool desktop_entry_parser::entry_has_action(std::string_view str) {
-        auto actions = m_target.get_actions();
+        auto actions = m_target.get_actions_key();
         if (!actions) {
             return false;
         }
-        return std::ranges::find(*m_target.get_actions(), str) != actions->end();
+        return std::ranges::find(*m_target.get_actions_key(), str) != actions->end();
+    }
+
+    void desktop_entry_parser::check_for_required_keys() {
+        bool valid = true;
+        if (m_is_main_section) {
+            valid = key_is_valid(m_target.get_type())
+                    && key_is_valid(m_target.get_name())
+                    && (m_target.get_type() != entry_type::Link || key_is_valid(m_target.get_url()));
+        } else if (m_current_action) {
+            valid = key_is_valid(m_current_action->m_name)
+                    && (m_target.get_dbus_activatable() || key_is_valid(m_current_action->m_exec));
+        }
+
+        if (!valid) {
+            throw std::runtime_error("Required key missing");
+        }
     }
 
     desktop_entry_parser::desktop_entry_parser(desktop_entry &target) : m_target(target) { }
@@ -273,7 +359,7 @@ namespace xdg::desktop_entry_spec::detail {
                 continue;
             } else if (std::string_view section_parsed = parse_group_head(line); !section_parsed.empty()) {
                 update_current_section(section_parsed);
-            } else {
+            } else if (!m_skip_section) {
                 parse_key_value_line(std::move(line));
             }
         }

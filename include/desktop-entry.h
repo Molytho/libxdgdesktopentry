@@ -48,7 +48,13 @@ namespace xdg::desktop_entry_spec {
     API_PUBLIC std::ostream &operator<<(std::ostream &os, well_known_keys val);
     API_PUBLIC std::istream &operator>>(std::istream &is, well_known_keys &out);
 
-    enum class entry_type : uint8_t { Application, Link, Directory };
+    enum class entry_type : uint8_t {
+        Application,
+        Link,
+        Directory,
+        First = Application,
+        Last  = Directory
+    };
     API_PUBLIC std::string_view to_string(entry_type val) noexcept;
     API_PUBLIC std::optional<entry_type> entry_type_from_string(std::string_view str) noexcept;
     API_PUBLIC std::ostream &operator<<(std::ostream &os, entry_type val);
@@ -95,7 +101,20 @@ namespace xdg::desktop_entry_spec {
             return m_str == other.m_str;
         }
     };
+} // namespace xdg::desktop_entry_spec
 
+namespace std {
+    template<>
+    struct hash<xdg::desktop_entry_spec::locale> {
+        hash<std::string_view> m_str_hash {};
+
+        size_t operator()(const xdg::desktop_entry_spec::locale &locale) const {
+            return m_str_hash(locale.str());
+        }
+    };
+} // namespace std
+
+namespace xdg::desktop_entry_spec {
     namespace detail {
         class desktop_entry_parser;
 
@@ -121,6 +140,27 @@ namespace xdg::desktop_entry_spec {
 
     using localized_string      = detail::localized_data<std::string>;
     using localized_string_list = detail::localized_data<std::vector<std::string>>;
+
+    class application_action {
+    public:
+        application_action(std::string id);
+
+        const std::string &get_id() const noexcept { return m_id; }
+
+        const localized_string &get_name() const noexcept { return m_name; }
+
+        const localized_string &get_icon() const noexcept { return m_icon; }
+
+        const std::string &get_exec() const noexcept { return m_exec; }
+
+    private:
+        friend detail::desktop_entry_parser;
+
+        std::string m_id;
+        localized_string m_name;
+        localized_string m_icon;
+        std::string m_exec;
+    };
 
     class API_PUBLIC desktop_entry {
     public:
@@ -187,7 +227,9 @@ namespace xdg::desktop_entry_spec {
             return get_well_known_bool<false>(well_known_keys::Terminal);
         }
 
-        const std::vector<std::string> *get_actions() const noexcept {
+        const std::vector<application_action> &get_actions() const noexcept { return m_actions; }
+
+        const std::vector<std::string> *get_actions_key() const noexcept {
             return get_well_known_typed<std::vector<std::string>>(well_known_keys::Actions);
         }
 
@@ -279,20 +321,11 @@ namespace xdg::desktop_entry_spec {
 
         std::filesystem::path m_store {};
         std::filesystem::path m_relative_path {};
+
         std::array<std::any, size_t(well_known_keys::Last) + 1> m_well_known_keys {};
+        std::vector<application_action> m_actions {};
     };
 
     API_PUBLIC std::vector<std::unique_ptr<desktop_entry>> get_all_desktop_entries();
 } // namespace xdg::desktop_entry_spec
-
-namespace std {
-    template<>
-    struct hash<xdg::desktop_entry_spec::locale> {
-        hash<std::string_view> m_str_hash {};
-
-        size_t operator()(const xdg::desktop_entry_spec::locale &locale) const {
-            return m_str_hash(locale.str());
-        }
-    };
-} // namespace std
 #endif
